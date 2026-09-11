@@ -1,0 +1,92 @@
+#!/bin/sh
+# OneCloud network interface optimization - RPS/RFS/XPS/BQL
+# Triggered on network interface add/register
+
+[ "$ACTION" = "add" ] || [ "$ACTION" = "register" ] || exit 0
+
+INTERFACE="$INTERFACE"
+[ -z "$INTERFACE" ] && exit 0
+
+# Optimize physical ethernet, bridge, and TUN interfaces
+case "$INTERFACE" in
+    eth*|usb*|en*|br-*|tun*|nikki)
+        ;;
+    *)
+        exit 0
+        ;;
+esac
+
+SYSFS="/sys/class/net/$INTERFACE"
+[ -d "$SYSFS" ] || exit 0
+
+# Get number of CPUs
+CPU_COUNT=$(grep -c ^processor /proc/cpuinfo 2>/dev/null || echo 4)
+
+# For single-queue physical NIC: keep CPU0 for hardirq, use CPU1-CPUn for RPS
+# For bridge/TUN: use all CPUs
+case "$INTERFACE" in
+    eth*|usb*|en*)
+        # RPS mask: all CPUs except CPU0 (e.g. 4-core = 0xe = 1110)
+        RPS_MASK_HEX=$(printf '%x' "$(((1 << CPU_COUNT) - 2))")
+        ;;
+    *)
+        # Bridge/TUN: use all CPUs
+        RPS_MASK_HEX=$(printf '%x' "$(((1 << CPU_COUNT) - 1))")
+        ;;
+esac
+# XPS mask: always all CPUs
+XPS_MASK_HEX=$(printf '%x' "$(((1 << CPU_COUNT) - 1))")
+
+# === RPS (Receive Packet Steering) ===
+for q in "$SYSFS"/queues/rx-*/rps_cpus; do
+    [ -f "$q" ] && echo "$RPS_MASK_HEX" > "$q" 2>/dev/null
+done
+
+# RPS flow table entries
+for q in "$SYSFS"/queues/rx-*/rps_flow_cnt; do
+    [ -f "$q" ] && echo "4096" > "$q" 2>/dev/null
+done
+
+# === RFS (Receive Flow Steering) ===
+if [ -f /proc/sys/net/core/rps_sock_flow_entries ]; then
+    echo "32768" > /proc/sys/net/core/rps_sock_flow_entries 2>/dev/null
+fi
+
+# === XPS (Transmit Packet Steering) ===
+for q in "$SYSFS"/queues/tx-*/xps_cpus; do
+    [ -f "$q" ] && echo "$XPS_MASK_HEX" > "$q" 2>/dev/null
+done
+
+# === BQL (Byte Queue Limits) ===
+for q in "$SYSFS"/queues/tx-*/byte_queue_limits/limit_max; do
+    [ -f "$q" ] && echo "3000" > "$q" 2>/dev/null
+done
+
+# === GRO (Generic Receive Offload) ===
+if [ -f "$SYSFS/gro_flush_timeout" ]; then
+    echo "0" > "$SYSFS/gro_flush_timeout" 2>/dev/null
+fi
+
+# === NIC ring buffer and offload (physical interfaces only) ===
+case "$INTERFACE" in
+    eth*|usb*|en*)
+        if command -v ethtool >/dev/null 2>&1; then
+            ethtool -G "$INTERFACE" rx 1024 tx 1024 2>/dev/null || true
+            ethtool -K "$INTERFACE" rx on tx on sg on tso on gso on gro on 2>/dev/null || true
+            ethtool -C "$INTERFACE" rx-usecs 1000 rx-frames 10 2>/dev/null || true
+        fi
+        # === Set IRQ affinity for physical NIC interrupts ===
+        for irq in $(grep -E "$INTERFACE|eth0|meson.*eth|stmmac" /proc/interrupts 2>/dev/null | awk -F: '{print $1}' | tr -d ' '); do
+            [ -f "/proc/irq/$irq/smp_affinity" ] && echo "$XPS_MASK_HEX" > "/proc/irq/$irq/smp_affinity" 2>/dev/null
+        done
+        ;;
+esac
+
+# === Enable TCP fastopen on this interface ===
+if [ -f "$SYSFS/tcp_fastopen" ]; then
+    echo "3" > "$SYSFS/tcp_fastopen" 2>/dev/null
+fi
+
+logger -t network-optimize "Optimized $INTERFACE: RPS=$RPS_MASK_HEX XPS=$XPS_MASK_HEX RFS/BQL enabled"
+
+exit 0

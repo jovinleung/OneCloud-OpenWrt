@@ -1,0 +1,48 @@
+#!/bin/sh
+# OneCloud system optimization - ZRAM, NTP, system settings
+
+# === ZRAM configuration ===
+uci set system.@system[0].zram_size_mb='256'
+uci set system.@system[0].zram_comp_algo='lz4'
+
+# === NTP configuration (China servers) ===
+uci set system.ntp.enabled='1'
+uci set system.ntp.enable_server='0'
+uci delete system.ntp.server 2>/dev/null
+uci add_list system.ntp.server='ntp.aliyun.com'
+uci add_list system.ntp.server='time1.cloud.tencent.com'
+uci add_list system.ntp.server='time.ustc.edu.cn'
+uci add_list system.ntp.server='cn.pool.ntp.org'
+
+# === System settings ===
+uci set system.@system[0].hostname='OneCloud'
+uci set system.@system[0].timezone='CST-8'
+uci set system.@system[0].zonename='Asia/Shanghai'
+uci set system.@system[0].ttylogin='0'
+uci set system.@system[0].log_size='256'
+uci set system.@system[0].conloglevel='1'
+uci set system.@system[0].cronloglevel='9'
+
+# === Enable irqbalance for better network performance ===
+if [ -f /etc/config/irqbalance ]; then
+    uci set irqbalance.irqbalance.enabled='1'
+    uci commit irqbalance
+fi
+
+# === Set default LuCI theme to Argon (not Bootstrap) ===
+if [ -f /etc/config/luci ]; then
+    uci set luci.main.mediaurlbase='/luci-static/argon'
+    uci set luci.main.lang='zh_cn'
+    uci commit luci
+fi
+
+# === ttyd: auto-login root without password ===
+if [ -f /etc/config/ttyd ]; then
+    uci set ttyd.@ttyd[0].command='/bin/login -f root'
+    uci set ttyd.@ttyd[0].interface='@lan'
+    uci commit ttyd
+fi
+
+uci commit system
+
+exit 0

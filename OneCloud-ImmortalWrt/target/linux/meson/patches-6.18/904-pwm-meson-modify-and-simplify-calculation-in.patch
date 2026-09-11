@@ -1,0 +1,21 @@
+--- a/drivers/pwm/pwm-meson.c
++++ b/drivers/pwm/pwm-meson.c
+@@ -360,8 +360,16 @@
+ 	lo = FIELD_GET(PWM_LOW_MASK, value);
+ 	hi = FIELD_GET(PWM_HIGH_MASK, value);
+ 
+-	state->period = meson_pwm_cnt_to_ns(fin_freq, lo + hi);
+-	state->duty_cycle = meson_pwm_cnt_to_ns(fin_freq, hi);
++	if (lo == 0) {
++		state->period = meson_pwm_cnt_to_ns(fin_freq, hi);
++		state->duty_cycle = state->period;
++	} else if (lo >= hi) {
++		state->period = meson_pwm_cnt_to_ns(fin_freq, lo + hi);
++		state->duty_cycle = meson_pwm_cnt_to_ns(fin_freq, hi);
++	} else {
++		state->period = 0;
++		state->duty_cycle = 0;
++	}
+ 
+ 	return 0;
+ }

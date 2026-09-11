@@ -1,0 +1,29 @@
+#!/bin/sh
+# OneCloud LED setup - does not depend on board_name
+# Sets LED triggers on first boot
+
+# Wait for LED class to be available
+sleep 2
+
+# Blue LED: heartbeat (system status)
+if [ -d /sys/class/leds/blue:status ]; then
+    echo "heartbeat" > /sys/class/leds/blue:status/trigger 2>/dev/null || true
+fi
+
+# Green LED: netdev (network activity on eth0)
+if [ -d /sys/class/leds/green:status ]; then
+    echo "netdev" > /sys/class/leds/green:status/trigger 2>/dev/null || true
+    echo "eth0" > /sys/class/leds/green:status/device_name 2>/dev/null || true
+    echo "1" > /sys/class/leds/green:status/tx 2>/dev/null || true
+    echo "1" > /sys/class/leds/green:status/rx 2>/dev/null || true
+fi
+
+# Red LED: off (power indicator, keep off for normal operation)
+if [ -d /sys/class/leds/red:status ]; then
+    echo "none" > /sys/class/leds/red:status/trigger 2>/dev/null || true
+    echo "0" > /sys/class/leds/red:status/brightness 2>/dev/null || true
+fi
+
+logger -t led-setup "LED triggers configured: blue=heartbeat, green=netdev(eth0), red=off"
+
+exit 0
