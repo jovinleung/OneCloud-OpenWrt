@@ -21,12 +21,9 @@ include $(INCLUDE_DIR)/target.mk
 
 DEFAULT_PACKAGES += \
 	e2fsprogs \
-	kmod-usb-hid \
-	kmod-usb-net \
-	kmod-usb-net-rtl8152 \
-	kmod-usb-net-asix-ax88179 \
-	kmod-usb-net-smsc95xx \
-	kmod-usb-net-cdc-ether \
+	kmod-usb-storage \
+	kmod-usb-storage-uas \
+	kmod-macvlan \
 	losetup \
 	mkf2fs \
 	automount \
@@ -34,7 +31,10 @@ DEFAULT_PACKAGES += \
 	partx-utils \
 	resize2fs \
 	zram-swap \
+	liblz4 \
 	ethtool \
+	usbutils \
+	iperf3 \
 	htop \
 	curl \
 	wget \
@@ -46,13 +46,19 @@ DEFAULT_PACKAGES += \
 	kmod-nf-conntrack-netlink \
 	kmod-nft-offload \
 	kmod-tun \
+	wireguard-tools \
 	kmod-nft-tproxy \
 	kmod-nft-socket \
 	kmod-inet-diag \
 	nftables-json \
 	conntrack \
 	ip-full \
-	irqbalance
+	irqbalance \
+	luci-theme-argon \
+	luci-app-ttyd \
+	luci-app-diskman \
+	luci-app-hd-idle \
+	luci-app-nikki
 
 KERNELNAME:=Image dtbs
 

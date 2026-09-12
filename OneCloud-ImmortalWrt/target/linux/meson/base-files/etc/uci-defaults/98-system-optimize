@@ -19,7 +19,7 @@ uci set system.@system[0].hostname='OneCloud'
 uci set system.@system[0].timezone='CST-8'
 uci set system.@system[0].zonename='Asia/Shanghai'
 uci set system.@system[0].ttylogin='0'
-uci set system.@system[0].log_size='256'
+uci set system.@system[0].log_size='1024'
 uci set system.@system[0].conloglevel='1'
 uci set system.@system[0].cronloglevel='9'
 

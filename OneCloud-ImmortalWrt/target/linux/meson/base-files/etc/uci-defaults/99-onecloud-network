@@ -12,8 +12,11 @@ uci add_list network.lan.dns='192.168.2.1'
 uci set network.lan.ip6assign='60'
 uci set network.lan.multipath='off'
 
-# Set br-lan MAC address (fixed MAC for stability)
-uci set network.@device[0].macaddr='02:81:4b:1a:2c:3d'
+# Set br-lan MAC address from eth0 (unique per device, avoids conflicts)
+ETH0_MAC=$(cat /sys/class/net/eth0/address 2>/dev/null)
+if [ -n "$ETH0_MAC" ] && [ "$ETH0_MAC" != "00:00:00:00:00:00" ]; then
+    uci set network.@device[0].macaddr="$ETH0_MAC"
+fi
 
 # Disable DHCP server on LAN (bypass router mode)
 # ignore=1 disables DHCPv4; dhcpv6/ra disabled to avoid conflict with main router

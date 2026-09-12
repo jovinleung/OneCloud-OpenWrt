@@ -23,7 +23,7 @@ echo "Gateway: $GATEWAY"
 echo ""
 
 # 1. Configure network - static IP on LAN (CIDR format, keep IPv6)
-echo "[1/5] Configuring network interface..."
+echo "[1/6] Configuring network interface..."
 uci set network.lan.proto='static'
 uci delete network.lan.ipaddr 2>/dev/null || true
 uci add_list network.lan.ipaddr="${IP}/${PREFIX}"
@@ -36,14 +36,14 @@ uci commit network
 
 # 2. Disable DHCP server on LAN (bypass router mode)
 # ignore=1 disables DHCPv4; dhcpv6/ra disabled to avoid conflict with main router
-echo "[2/5] Disabling DHCP server..."
+echo "[2/6] Disabling DHCP server..."
 uci set dhcp.lan.ignore='1'
 uci set dhcp.lan.dhcpv6='disabled'
 uci set dhcp.lan.ra='disabled'
 uci commit dhcp
 
 # 3. Configure firewall - bypass mode (single arm)
-echo "[3/5] Configuring firewall (bypass mode)..."
+echo "[3/6] Configuring firewall (bypass mode)..."
 uci set firewall.@defaults[0].forward='ACCEPT'
 uci set firewall.@defaults[0].syn_flood='1'
 uci set firewall.@defaults[0].flow_offloading='1'
@@ -55,7 +55,7 @@ uci delete firewall.@forwarding[0] 2>/dev/null || true
 uci commit firewall
 
 # 4. Ensure sysctl optimizations are applied (use existing 99-bypass.conf if available)
-echo "[4/5] Applying sysctl optimizations..."
+echo "[4/6] Applying sysctl optimizations..."
 if [ ! -f /etc/sysctl.d/99-bypass.conf ]; then
     # Create basic sysctl config if not exists (full version comes from firmware)
     cat > /etc/sysctl.d/99-bypass.conf << 'SYSCTL'
@@ -82,11 +82,37 @@ SYSCTL
 fi
 sysctl -p /etc/sysctl.d/99-bypass.conf 2>/dev/null || true
 
-# 5. Restart services
-echo "[5/5] Restarting services..."
+# 5. Configure DNS - use gateway as upstream DNS, disable DNS forwarding to WAN
+echo "[5/6] Configuring DNS..."
+uci set dhcp.@dnsmasq[0].domainneeded='1'
+uci set dhcp.@dnsmasq[0].boguspriv='1'
+uci set dhcp.@dnsmasq[0].localise_queries='1'
+uci set dhcp.@dnsmasq[0].rebind_protection='1'
+uci set dhcp.@dnsmasq[0].rebind_localhost='1'
+uci set dhcp.@dnsmasq[0].local='/lan/'
+uci set dhcp.@dnsmasq[0].domain='lan'
+uci set dhcp.@dnsmasq[0].expandhosts='1'
+uci set dhcp.@dnsmasq[0].authoritative='0'
+uci set dhcp.@dnsmasq[0].readethers='1'
+uci set dhcp.@dnsmasq[0].leasefile='/tmp/dhcp.leases'
+uci set dhcp.@dnsmasq[0].resolvfile='/tmp/resolv.conf.d/resolv.conf.auto'
+uci set dhcp.@dnsmasq[0].localservice='0'
+uci set dhcp.@dnsmasq[0].nonwildcard='1'
+# Add public DNS as fallback
+uci add_list dhcp.@dnsmasq[0].server='223.5.5.5'
+uci add_list dhcp.@dnsmasq[0].server='119.29.29.29'
+uci commit dhcp
+
+# 6. Restart services
+echo "[6/6] Restarting services..."
+# dnsmasq still runs as DNS forwarder (DHCP disabled)
 /etc/init.d/dnsmasq restart 2>/dev/null || true
-/etc/init.d/odhcpd restart 2>/dev/null || true
+# odhcpd not needed in bypass mode (IPv6 DHCP/RA disabled)
+/etc/init.d/odhcpd stop 2>/dev/null || true
+/etc/init.d/odhcpd disable 2>/dev/null || true
 /etc/init.d/firewall restart 2>/dev/null || true
+# Apply network changes
+/etc/init.d/network reload 2>/dev/null || true
 
 echo ""
 echo "=== Bypass router mode configured ==="
